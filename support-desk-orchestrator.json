@@ -1,0 +1,1194 @@
+{
+  "name": "Support Desk Orchestrator",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "support-intake",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.2,
+      "position": [
+        0,
+        1328
+      ],
+      "id": "0d03cf7c-ddf2-4c2d-800b-49041e639a0b",
+      "name": "Webhook",
+      "webhookId": "REGENERATE_ON_IMPORT"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "2c038406-8058-42d0-8990-27281b48e13a",
+              "leftValue": "={{ $json.body.customer_name }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            },
+            {
+              "id": "78a1e277-f9ef-44c6-853a-9a18b154e198",
+              "leftValue": "={{ $json.body.customer_email }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            },
+            {
+              "id": "baedd9f6-b051-4630-852e-c693c8a24bf4",
+              "leftValue": "={{ $json.body.message }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        224,
+        1328
+      ],
+      "id": "03e6b9c2-3e30-488c-bb36-f70c91a06158",
+      "name": "Valid Message?"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "{ \"error\": \"customer_name, customer_email and message are required\" }",
+        "options": {
+          "responseCode": 400
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        512,
+        1520
+      ],
+      "id": "9df06efa-fcc7-49b1-a3fd-ed7cca5c4e13",
+      "name": "Respond Invalid"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "{ \"status\": \"received\" }",
+        "options": {
+          "responseCode": 202
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        512,
+        1328
+      ],
+      "id": "c2e276d4-ed00-496f-92ee-28bfe5140a93",
+      "name": "Respond Accepted"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Customer: {{ $json.body.customer_name }}\nMessage: {{ $json.body.message }}",
+        "options": {
+          "systemMessage": "You are a supervisor for a customer support desk of an HVAC company in Lahore.\nYou receive one customer message. Classify it into exactly one category:\n- billing: charges, invoices, refunds, payment questions\n- booking: scheduling or availability for a visit\n- technical: the AC or unit is not working, noise, leaks, or repair questions\n- complaint: the customer is unhappy with service, a staff member, or a delay\n- general: other questions, such as prices, areas, or services offered\n\nAlso return a confidence score from 0 to 1 for your classification.\n\nRules:\n1. If the message has two or more categories, choose the one the customer needs solved first.\n2. Use only the message text. Do not invent details.\n\nReturn ONLY valid JSON, with no extra text or markdown:\n{\n  \"category\": \"billing, booking, technical, complaint, or general\",\n  \"confidence\": number from 0 to 1,\n  \"reason\": \"one short sentence\"\n}"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        448,
+        928
+      ],
+      "id": "48c8562f-c2fa-4a35-8304-5eaf5a7ecd6a",
+      "name": "Supervisor Agent"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-5-mini"
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        528,
+        1168
+      ],
+      "id": "b465e2b9-714b-4187-90c2-c0cf7986b55a",
+      "name": "Supervisor Model",
+      "credentials": {
+        "openAiApi": {
+          "id": "YOUR_OPENAI_CREDENTIAL_ID",
+          "name": "OpenAI account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $input.first().json.output || '';\n\nlet data;\ntry {\n  data = JSON.parse(raw.replace(/```json|```/g, '').trim());\n} catch (err) {\n  data = { category: 'general', confidence: 0, reason: 'Routing output could not be parsed.' };\n}\n\nconst allowed = ['billing', 'booking', 'technical', 'complaint', 'general'];\nconst category = allowed.includes(data.category) ? data.category : 'general';\nconst confidence = typeof data.confidence === 'number' ? data.confidence : 0;\n\nreturn [{\n  json: {\n    category,\n    confidence,\n    reason: data.reason || 'no reason given'\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        800,
+        1040
+      ],
+      "id": "1918af63-7ba8-492b-84cc-47281853bcae",
+      "name": "Parse Routing"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "fba5df29-6b3a-4ebf-81ae-c45dd0874d24",
+              "leftValue": "={{ $json.confidence }}",
+              "rightValue": 0.7,
+              "operator": {
+                "type": "number",
+                "operation": "gte"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1024,
+        1040
+      ],
+      "id": "c400b6b6-f646-4b16-b0c7-ff4163044cba",
+      "name": "Confident?"
+    },
+    {
+      "parameters": {
+        "sendTo": "OWNER_EMAIL",
+        "subject": "=Support handoff: {{ $('Webhook').first().json.body.customer_name }}",
+        "emailType": "text",
+        "message": "=Customer: {{ $('Webhook').first().json.body.customer_name }} \nEmail: {{ $('Webhook').first().json.body.customer_email }} \nOriginal message: {{ $('Webhook').first().json.body.message }} \nCategory: {{ $('Parse Routing').first().json.category }} \nConfidence: {{ $('Parse Routing').first().json.confidence }}\nReason: {{ $('Parse Routing').first().json.reason }} \nPlease reply to the customer manually.",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        2624,
+        1056
+      ],
+      "id": "6d735f35-35ab-4e74-80f5-8c3923bb7449",
+      "name": "Human Handoff Alert",
+      "webhookId": "REGENERATE_ON_IMPORT",
+      "retryOnFail": true,
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "YOUR_GMAIL_CREDENTIAL_ID",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_GOOGLE_SHEET_ID",
+          "mode": "list",
+          "cachedResultName": "Support Desk Log",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/YOUR_GOOGLE_SHEET_ID/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Handoffs",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/YOUR_GOOGLE_SHEET_ID/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "timestamp": "={{ $now.toISO() }}",
+            "customer_name": "={{ $('Webhook').first().json.body.customer_name }}",
+            "customer_email": "={{ $('Webhook').first().json.body.customer_email }}",
+            "message": "={{ $('Webhook').first().json.body.message }}",
+            "category": "={{ $('Parse Routing').first().json.category }}",
+            "confidence": "={{ $('Parse Routing').first().json.confidence }}",
+            "reason": "={{ $('Parse Routing').first().json.reason }}",
+            "status": "needs_human"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "timestamp",
+              "displayName": "timestamp",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "customer_name",
+              "displayName": "customer_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "customer_email",
+              "displayName": "customer_email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "message",
+              "displayName": "message",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "category",
+              "displayName": "category",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "confidence",
+              "displayName": "confidence",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "reason",
+              "displayName": "reason",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        2848,
+        1056
+      ],
+      "id": "d78d45c7-e7fe-4fe7-80fc-ce5b1685049f",
+      "name": "Log Handoff",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "YOUR_GOOGLE_SHEETS_CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "billing",
+                    "rightValue": "={{ $json.category }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "0b909d2b-0235-4e7a-b081-f5dcc7c5019c"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Output 0"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "0f439512-2add-4686-9ca8-3a51ddf1cb2f",
+                    "leftValue": "booking",
+                    "rightValue": "={{ $json.category }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Output 1"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "03f07b9b-3985-47a7-8fe1-ff2f994baac3",
+                    "leftValue": "technical",
+                    "rightValue": "={{ $json.category }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Output 2"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "4f7110ea-fa58-4461-b750-8725aa4e318d",
+                    "leftValue": "complaint",
+                    "rightValue": "={{ $json.category }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Output 3"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "8c0d0606-9d2e-4829-87ce-da85f71b6fb9",
+                    "leftValue": "general",
+                    "rightValue": "={{ $json.category }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Output 4"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra"
+        }
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        1248,
+        608
+      ],
+      "id": "f602721b-1044-4a12-b847-579cfa6c59f0",
+      "name": "Route by Category"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Customer: {{ $('Webhook').first().json.body.customer_name }}\nMessage: {{ $('Webhook').first().json.body.message }}",
+        "options": {
+          "systemMessage": "You are a billing support agent for an HVAC company in Lahore.\nYou receive a customer message that was classified as a billing question.\n\nWrite a short, polite reply in plain text, 3 to 5 lines:\n- Acknowledge the customer's billing concern\n- - If the customer asks for a refund, a charge reversal, or a payment dispute, say that the billing team will review it and get back to them. Do not mention any number of days or deadline\n- If the question is about an invoice amount or payment method, say the team will confirm the details\n- Do not promise a refund, a discount, or a specific amount\n\nUse only the information in the customer message. Do not invent invoice numbers, amounts, or policies."
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        1472,
+        -240
+      ],
+      "id": "c84bcfa9-f82d-4dd7-b62a-0a24728dbd9b",
+      "name": "Billing Agent"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-5-mini"
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        1552,
+        -16
+      ],
+      "id": "28fae090-dd64-48f2-b996-47d9c3b29dc5",
+      "name": "Billing Model",
+      "credentials": {
+        "openAiApi": {
+          "id": "YOUR_OPENAI_CREDENTIAL_ID",
+          "name": "OpenAI account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Customer: {{ $('Webhook').first().json.body.customer_name }}\nMessage: {{ $('Webhook').first().json.body.message }}",
+        "options": {
+          "systemMessage": "You are a booking support agent for an HVAC company in Lahore.\nYou receive a customer message that was classified as a booking request.\n\nWrite a short, polite reply in plain text, 3 to 5 lines:\n- Thank the customer for reaching out\n- Say that the team will confirm an available time slot\n- Ask for the preferred date and time window, and the service address if not already given\n- Do not confirm any specific date, time, or technician\n\nUse only the information in the customer message. Do not invent availability or policies."
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        1472,
+        160
+      ],
+      "id": "e4b7eeb4-a9ae-4c4f-a9c3-43a520a142f3",
+      "name": "Booking Agent"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-5-mini"
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        1552,
+        400
+      ],
+      "id": "3b818671-8194-43e5-97fd-ce67e70a24a7",
+      "name": "Booking Model",
+      "credentials": {
+        "openAiApi": {
+          "id": "YOUR_OPENAI_CREDENTIAL_ID",
+          "name": "OpenAI account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Customer: {{ $('Webhook').first().json.body.customer_name }}\nMessage: {{ $('Webhook').first().json.body.message }}",
+        "options": {
+          "systemMessage": "You are a technical support agent for an HVAC company in Lahore.\nYou receive a customer message about an AC or unit problem.\n\nWrite a short, helpful reply in plain text, 4 to 6 lines:\n- Thank the customer and acknowledge the problem\n- Give 2 or 3 simple safe checks the customer can do now, such as checking the power switch, the thermostat setting, or the air filter\n- Tell the customer not to open the unit or attempt gas or electrical repairs themselves\n- If the problem involves gas smell, sparking, smoke, or water leaking near electrical parts, tell the customer to switch off the unit and call the team immediately\n- - Say that the team will contact the customer to arrange a visit. Do not mention any date, time, or technician name\n\nUse only the information in the customer message. Do not guess the cause of the problem."
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        1472,
+        560
+      ],
+      "id": "e9c25beb-2f78-40c5-a76b-e7af54b0e43c",
+      "name": "Technical Agent"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-5-mini"
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        1552,
+        800
+      ],
+      "id": "8cae76fc-90b7-479b-972d-71ee95189590",
+      "name": "Technical Model",
+      "credentials": {
+        "openAiApi": {
+          "id": "YOUR_OPENAI_CREDENTIAL_ID",
+          "name": "OpenAI account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Customer: {{ $('Webhook').first().json.body.customer_name }}\nMessage: {{ $('Webhook').first().json.body.message }}",
+        "options": {
+          "systemMessage": "You are a general support agent for an HVAC company in Lahore.\nYou receive a customer question about services, areas, or pricing.\n\nWrite a short, friendly reply in plain text, 3 to 5 lines:\n- Answer only what the company information below supports\n-- If the question is about price, say that the final price is confirmed after inspection. Do not promise a price range\n- If the question is about an area or service you do not have information about, say that the team will confirm\n- Do not invent prices, areas, or service details\n\nCompany information:\n- Services: AC installation, repair, servicing, and maintenance\n- Location: Lahore\n\nUse only the information above and in the customer message."
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        1472,
+        1072
+      ],
+      "id": "e2c32e20-0ced-4108-ba18-4028bc1ff74a",
+      "name": "General Agent"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-5-mini"
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        1552,
+        1296
+      ],
+      "id": "9c5ca6a8-1c36-4d2c-8be1-37f77ec4afb7",
+      "name": "General Model",
+      "credentials": {
+        "openAiApi": {
+          "id": "YOUR_OPENAI_CREDENTIAL_ID",
+          "name": "OpenAI account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Customer message: {{ $('Webhook').first().json.body.message }}\nCategory: {{ $('Parse Routing').first().json.category }}\nDraft reply: {{ $json.output }}",
+        "options": {
+          "systemMessage": "You are a quality checker for customer support replies at an HVAC company in Lahore.\nYou receive the customer message, its category, and a draft reply.\n\nCheck the draft against these rules:\n1. It must not promise a refund, discount, or specific amount.\n2. 2. It must not confirm a specific date, time, deadline, timeframe, technician, or refund outcome.\n3. It must not give repair instructions beyond simple safe checks.\n4. It must not invent prices, invoice numbers, policies, or service details.\n5. It must be polite and answer the customer's message.\n\nReturn ONLY valid JSON, with no extra text or markdown:\n{\n  \"approved\": true or false,\n  \"reason\": \"one short sentence; if rejected, say what is wrong\"\n}"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        1824,
+        416
+      ],
+      "id": "739e485e-7e3a-4575-b867-277371d73727",
+      "name": "QA Agent"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-5-mini"
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        1904,
+        640
+      ],
+      "id": "0c5add9b-ffb6-474c-a0a8-d51156f84254",
+      "name": "QA Model",
+      "credentials": {
+        "openAiApi": {
+          "id": "YOUR_OPENAI_CREDENTIAL_ID",
+          "name": "OpenAI account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $input.first().json.output || '';\n\nlet data;\ntry {\n  data = JSON.parse(raw.replace(/```json|```/g, '').trim());\n} catch (err) {\n  data = { approved: false, reason: 'QA output could not be parsed.' };\n}\n\n// Find the draft from whichever specialist ran in this execution\nconst specialists = ['Billing Agent', 'Booking Agent', 'Technical Agent', 'General Agent'];\nlet draft = '';\nfor (const name of specialists) {\n  try {\n    const out = $(name).first().json.output;\n    if (out) { draft = out; break; }\n  } catch (err) {\n    // this specialist did not run in this execution\n  }\n}\n\nreturn [{\n  json: {\n    approved: String(data.approved).trim().toLowerCase() === 'true',\n    reason: data.reason || 'no reason given',\n    draft\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2176,
+        416
+      ],
+      "id": "7c754ed4-a390-40df-b429-43c4cc3d3d80",
+      "name": "Parse QA"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "3bab8431-acc0-4661-ba8f-1e8254d2bb81",
+              "leftValue": "={{ $json.approved }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        2400,
+        416
+      ],
+      "id": "a17a9a9a-5228-428a-996a-7fb290c52a9a",
+      "name": "QA Passed?"
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $('Webhook').first().json.body.customer_email }}",
+        "subject": "Re: your message to our support desk",
+        "emailType": "text",
+        "message": "={{ $json.draft }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        2624,
+        320
+      ],
+      "id": "2bf3deb2-7cc6-4b16-9676-7dfac77d163e",
+      "name": "Send Reply to Customer",
+      "webhookId": "REGENERATE_ON_IMPORT",
+      "retryOnFail": true,
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "YOUR_GMAIL_CREDENTIAL_ID",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_GOOGLE_SHEET_ID",
+          "mode": "list",
+          "cachedResultName": "Support Desk Log",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/YOUR_GOOGLE_SHEET_ID/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Replies",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/YOUR_GOOGLE_SHEET_ID/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "timestamp": "={{ $now.toISO() }}",
+            "customer_name": "={{ $('Webhook').first().json.body.customer_name }}",
+            "customer_email": "={{ $('Webhook').first().json.body.customer_email }}",
+            "category": "={{ $('Parse Routing').first().json.category }}",
+            "reply": "={{ $json.draft }}",
+            "status": "sent"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "timestamp",
+              "displayName": "timestamp",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "customer_name",
+              "displayName": "customer_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "customer_email",
+              "displayName": "customer_email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "category",
+              "displayName": "category",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "reply",
+              "displayName": "reply",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        2848,
+        320
+      ],
+      "id": "d40ea4e2-ec5f-4623-9f6f-16844510baea",
+      "name": "Log Reply Sent",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "YOUR_GOOGLE_SHEETS_CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Valid Message?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Valid Message?": {
+      "main": [
+        [
+          {
+            "node": "Supervisor Agent",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Respond Accepted",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Invalid",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Supervisor Agent": {
+      "main": [
+        [
+          {
+            "node": "Parse Routing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Supervisor Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Supervisor Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Routing": {
+      "main": [
+        [
+          {
+            "node": "Confident?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Confident?": {
+      "main": [
+        [
+          {
+            "node": "Route by Category",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Human Handoff Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Human Handoff Alert": {
+      "main": [
+        [
+          {
+            "node": "Log Handoff",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route by Category": {
+      "main": [
+        [
+          {
+            "node": "Billing Agent",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Booking Agent",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Technical Agent",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Human Handoff Alert",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "General Agent",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Human Handoff Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Billing Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Billing Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Booking Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Booking Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Technical Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Technical Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "General Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "General Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Billing Agent": {
+      "main": [
+        [
+          {
+            "node": "QA Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "QA Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "QA Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Booking Agent": {
+      "main": [
+        [
+          {
+            "node": "QA Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Technical Agent": {
+      "main": [
+        [
+          {
+            "node": "QA Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "General Agent": {
+      "main": [
+        [
+          {
+            "node": "QA Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "QA Agent": {
+      "main": [
+        [
+          {
+            "node": "Parse QA",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse QA": {
+      "main": [
+        [
+          {
+            "node": "QA Passed?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "QA Passed?": {
+      "main": [
+        [
+          {
+            "node": "Send Reply to Customer",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Human Handoff Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Reply to Customer": {
+      "main": [
+        [
+          {
+            "node": "Log Reply Sent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "REGENERATE_ON_IMPORT",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "REMOVED"
+  },
+  "nodeGroups": [],
+  "id": "WORKFLOW_ID",
+  "tags": []
+}
