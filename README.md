@@ -19,3 +19,38 @@ A multi-agent customer support workflow in n8n. A supervisor agent classifies ea
 9. **Complaints, fallbacks, low-confidence messages, and QA rejections** go to **Human Handoff Alert**, which emails the owner and logs the case.
 
 ## Required Credentials
+
+- OpenAI API
+- Gmail (OAuth2)
+- Google Sheets (OAuth2)
+
+## Setup
+
+1. In n8n, go to **Import from file** and select `support-desk-orchestrator.json`.
+2. Re-select the credentials for OpenAI, Gmail, and Google Sheets.
+3. Replace `OWNER_EMAIL` in the **Human Handoff Alert** node with your email.
+4. Replace `YOUR_GOOGLE_SHEET_ID` in the Google Sheets nodes with your sheet's ID.
+5. Create a Google Sheet with two tabs:
+   - **Handoffs:** `timestamp | customer_name | customer_email | message | category | confidence | reason | status`
+   - **Replies:** `timestamp | customer_name | customer_email | category | reply | status`
+6. Set each Google Sheets node to the correct tab.
+7. Publish the workflow, or run it with **Listen for test event** while testing.
+
+## Test
+
+Send a POST request to `/webhook/support-intake`:
+
+```json
+{
+  "customer_name": "Usman Tariq",
+  "customer_email": "test@example.com",
+  "message": "Your technician was two days late and nobody called me. I want a refund for the visit fee."
+}
+```
+
+This complaint goes to human handoff. Try a billing, booking, technical, and general message to test each specialist.
+
+## Notes
+
+- Replies are sent automatically only after QA approval. Everything QA rejects goes to a human.
+- Built as part of an n8n automation portfolio.
